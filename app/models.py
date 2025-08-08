@@ -81,6 +81,10 @@ class OrderCreate(BaseModel):
     def validate_items(cls, v):
         if not v:
             raise ValueError('注文には少なくとも1つの商品が必要です。')
+    
+        for item in v:
+            if item.product_id == 1:
+                raise ValueError('No!')
         return v
 
 class HelloWorld(BaseModel):

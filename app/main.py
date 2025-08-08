@@ -17,11 +17,6 @@ app = FastAPI(
 )
 
 
-@app.get("/hello", response_model=HelloWorld)
-def helloworld(hello_id: HelloWorld):
-    hello_id = 1
-    hello_str = "hello world"
-
 
 @app.post("/users", response_model=User)
 def create_user(user: UserCreate):
