@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ログイン - JWT認証システム</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f5f5f5;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .login-container {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 400px;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 2rem;
+        }
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: #555;
+            font-weight: bold;
+        }
+        input[type="text"], input[type="password"] {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 1rem;
+            box-sizing: border-box;
+        }
+        input[type="text"]:focus, input[type="password"]:focus {
+            outline: none;
+            border-color: #007bff;
+            box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+        }
+        .btn {
+            width: 100%;
+            padding: 0.75rem;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 1rem;
+            cursor: pointer;
+            margin-top: 1rem;
+        }
+        .btn:hover {
+            background-color: #0056b3;
+        }
+        .alert {
+            padding: 0.75rem;
+            margin-bottom: 1rem;
+            border-radius: 4px;
+            display: none;
+        }
+        .alert-success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .alert-error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .user-info {
+            display: none;
+            background-color: #e7f3ff;
+            padding: 1rem;
+            border-radius: 4px;
+            margin-top: 1rem;
+        }
+        .logout-btn {
+            background-color: #dc3545;
+            margin-top: 0.5rem;
+        }
+        .logout-btn:hover {
+            background-color: #c82333;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <h1>ログイン</h1>
+        
+        <div id="alert" class="alert"></div>
+        
+        <form id="loginForm">
+            <div class="form-group">
+                <label for="username">ユーザー名:</label>
+                <input type="text" id="username" name="username" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="password">パスワード:</label>
+                <input type="password" id="password" name="password" required>
+            </div>
+            
+            <button type="submit" class="btn">ログイン</button>
+        </form>
+        
+        <div id="userInfo" class="user-info">
+            <h3>ログイン済み</h3>
+            <p><strong>ユーザー名:</strong> <span id="currentUsername"></span></p>
+            <p><strong>フルネーム:</strong> <span id="currentFullName"></span></p>
+            <p><strong>メール:</strong> <span id="currentEmail"></span></p>
+            <button class="btn logout-btn" onclick="logout()">ログアウト</button>
+            <button class="btn" onclick="accessProtected()">保護されたリソースにアクセス</button>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000';
+        
+        // ページ読み込み時にトークンをチェック
+        document.addEventListener('DOMContentLoaded', function() {
+            const token = localStorage.getItem('access_token');
+            if (token) {
+                checkTokenAndShowUser();
+            }
+        });
+
+        // ログインフォームの処理
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            try {
+                const response = await fetch(`${API_BASE}/token`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: `username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    localStorage.setItem('access_token', data.access_token);
+                    showAlert('ログインに成功しました！', 'success');
+                    setTimeout(() => {
+                        checkTokenAndShowUser();
+                    }, 1000);
+                } else {
+                    const errorData = await response.json();
+                    showAlert('ログインに失敗しました: ' + errorData.detail, 'error');
+                }
+            } catch (error) {
+                showAlert('ネットワークエラーが発生しました', 'error');
+                console.error('Login error:', error);
+            }
+        });
+
+        // トークンをチェックしてユーザー情報を表示
+        async function checkTokenAndShowUser() {
+            const token = localStorage.getItem('access_token');
+            if (!token) return;
+
+            try {
+                const response = await fetch(`${API_BASE}/users/me/`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (response.ok) {
+                    const userData = await response.json();
+                    showUserInfo(userData);
+                } else {
+                    localStorage.removeItem('access_token');
+                    showAlert('トークンが無効です。再度ログインしてください。', 'error');
+                }
+            } catch (error) {
+                console.error('Token check error:', error);
+                showAlert('認証チェックでエラーが発生しました', 'error');
+            }
+        }
+
+        // ユーザー情報を表示
+        function showUserInfo(userData) {
+            document.getElementById('loginForm').style.display = 'none';
+            document.getElementById('userInfo').style.display = 'block';
+            
+            document.getElementById('currentUsername').textContent = userData.username;
+            document.getElementById('currentFullName').textContent = userData.full_name || 'N/A';
+            document.getElementById('currentEmail').textContent = userData.email || 'N/A';
+        }
+
+        // ログアウト
+        function logout() {
+            localStorage.removeItem('access_token');
+            document.getElementById('loginForm').style.display = 'block';
+            document.getElementById('userInfo').style.display = 'none';
+            document.getElementById('username').value = '';
+            document.getElementById('password').value = '';
+            showAlert('ログアウトしました', 'success');
+        }
+
+        // 保護されたリソースにアクセス
+        async function accessProtected() {
+            const token = localStorage.getItem('access_token');
+            if (!token) {
+                showAlert('ログインが必要です', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/protected`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    showAlert('保護されたリソースにアクセス成功: ' + data.message, 'success');
+                } else {
+                    const errorData = await response.json();
+                    showAlert('アクセス失敗: ' + errorData.detail, 'error');
+                }
+            } catch (error) {
+                showAlert('ネットワークエラーが発生しました', 'error');
+                console.error('Protected access error:', error);
+            }
+        }
+
+        // アラート表示
+        function showAlert(message, type) {
+            const alertDiv = document.getElementById('alert');
+            alertDiv.textContent = message;
+            alertDiv.className = `alert alert-${type}`;
+            alertDiv.style.display = 'block';
+            
+            setTimeout(() => {
+                alertDiv.style.display = 'none';
+            }, 5000);
+        }
+    </script>
+    
+    <div style="margin-top: 2rem; text-align: center; color: #666; font-size: 0.9rem;">
+        <p><strong>テストユーザー:</strong></p>
+        <p>ユーザー名: testuser / パスワード: secret</p>
+        <p>ユーザー名: admin / パスワード: secret</p>
+    </div>
+</body>
+</html>

@@ -1,37 +1,33 @@
 from datetime import datetime, timedelta, timezone
-from typing import Annotated, Set
+from typing import Annotated
 import jwt
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr
 from jwt.exceptions import InvalidTokenError
 from passlib.context import CryptContext
+from static_files import setup_static_files
 
-# このような機密情報はOS環境変数から取得すべき
 SECRET_KEY = "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
-"""
-SECRET_KEY = os.getenv("SECRET_KEY", "default_fallback_key")
-ALGORITHM = os.getenv("ALGORITHM", "HS256")
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
-"""
 
 fake_users_db = {
-    "johndoe": {
-        "username": "johndoe",
-        "full_name": "John Doe",
-        "email": "johndoe@example.com",
+    "testuser": {
+        "username": "testuser",
+        "full_name": "Test User",
+        "email": "test@example.com",
         "hashed_password": "$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",
         "disabled": False,
     },
-    "alice": {
-        "username": "alice",
-        "full_name": "Alice Wonderson",
-        "email": "alice@example.com",
+    "admin": {
+        "username": "admin",
+        "full_name": "Administrator",
+        "email": "admin@example.com",
         "hashed_password": "$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",
-        "disabled": True,
-    } 
+        "disabled": False,
+    }
 }
 
 class Token(BaseModel):
@@ -51,10 +47,21 @@ class UserInDB(User):
     hashed_password: str
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/token")
 
-app = FastAPI()
+app = FastAPI(title="JWT認証システム", description="簡単なJWT認証システム", version="1.0.0")
+
+# CORS設定
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# 静的ファイルの設定
+setup_static_files(app)
 
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
@@ -69,7 +76,6 @@ def get_user(db, username: str):
 
 def authenticate_user(fake_db, username: str, password: str):
     user = get_user(fake_db, username)
-    # ユーザが見つかればUserInDBオブジェクトを返す
     if not user:
         return False
     if not verify_password(password, user.hashed_password):
@@ -81,7 +87,7 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
     if expires_delta:
         expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.mkfir now(timezone.utc) + timedelta(minutes=15)
+        expire = datetime.now(timezone.utc) + timedelta(minutes=15)
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
@@ -131,8 +137,8 @@ async def login_for_access_token(
 async def read_users_me(current_user: Annotated[User, Depends(get_current_active_user)]):
     return current_user
 
-@app.get("/users/me/items/")
-async def read_own_items(
+@app.get("/protected")
+async def protected_route(
     current_user: Annotated[User, Depends(get_current_active_user)]
 ):
-    return [{"item_id": "Foo", "owner": current_user.username}] 
+    return {"message": f"Hello {current_user.username}, this is a protected route!"}
